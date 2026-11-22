@@ -816,7 +816,7 @@ if ($a === 'source') {
     return is_string($v) && strlen($v) >= 4;
   });
   $src = str_replace($secrets, '********', $src);
-  echo "/* 源码中的数据库与后台凭据已打码（********），部署时请填写你自己的值。 */\n";
+  echo "/* 数据库与后台凭据已移到同目录 config.php（源码中只剩占位值），部署时请填写你自己的值。 */\n";
   echo $src;
   exit;
 }
