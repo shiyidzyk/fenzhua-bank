@@ -1,5 +1,7 @@
 # DEVELOPMENT.md · 粉爪银行 · 卡包（基于LING不道大佬的开源项目二次开发版 LING不道大佬B站主页https://b23.tv/z2IIXcU）
 
+**中文** | [English](DEVELOPMENT.en.md)
+
 > 面向二次开发者：本文写清「相对上游改了什么、为什么改、怎么实现的、改的时候要注意什么」。
 > 上游：<https://gitee.com/hiteex/haitecard-web3>（GPL-3.0，Copyright (C) 2026 Hiteex Team）
 > 本仓库：<https://github.com/shiyidzyk/fenzhua-bank>
@@ -412,3 +414,8 @@ case 'demo': {
 - 文档：新增本 `DEVELOPMENT.md`。
 - 文档：重写 `README.md`（定位、上游关系、相对上游的改动、功能、使用、部署与构建、FAQ）。
 - 策略：默认主管理员保留**开箱可用**的演示账密（见 README），方便他人登录自己部署的实例；本站正式对外宣发前再整体替换（`config.php` / `data/root.json` / `ADMIN_HASH` 三处同步）。
+
+### 2026-11-23
+
+- 文档：新增英文版 `README.en.md`、`DEVELOPMENT.en.md`、`CHANGELOG.en.md`，并在各文档顶部加语言互链。
+- 文档：英文手册中标注「线上站已加固的主管理员改密流程（当前口令二次确认 + `root.json`/`config.php` 原子同步 + 旧口令旧令牌立即失效）尚未并入本仓库」，列入 §7 待办第 6 条。

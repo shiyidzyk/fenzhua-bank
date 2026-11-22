@@ -1,11 +1,13 @@
 # 粉爪银行 · 卡包
 
+**中文** | [English](README.en.md)
+
 一个能真的登录、真的存数据、真的转账的「虚构银行」演示站：把银行卡、双币钱包、结售汇、转账、电子回单这些真实银行 App 的交互，做成打开浏览器就能玩的沙盘。所有余额、卡号、流水、回单都是演示数据，不涉及任何真实资金。
 
 - 演示站：<https://fenzhua.yzz.me/>
 - 本仓库：<https://github.com/shiyidzyk/fenzhua-bank>
-- 二次开发说明（改了哪里、怎么实现的）：[DEVELOPMENT.md](DEVELOPMENT.md)
-- 变更日志：[CHANGELOG.md](CHANGELOG.md)
+- 二次开发说明（改了哪里、怎么实现的）：[DEVELOPMENT.md](DEVELOPMENT.md)（[English](DEVELOPMENT.en.md)）
+- 变更日志：[CHANGELOG.md](CHANGELOG.md)（[English](CHANGELOG.en.md)）
 
 > 本仓库即演示站的**对应源码**（GPL-3.0 要求的可修改源码），不是「只放个介绍」的镜像仓库。
 
@@ -357,9 +359,12 @@ ocr/                         Tesseract.js 5.1.1 + core + eng 语言包（离线 
 LICENSE.txt                  GPL-3.0 全文
 NOTICE.txt                   上游归属与第三方组件声明
 LICENSES/Apache-2.0.txt      Apache-2.0 全文（Tesseract.js、jsQR）
-README.md                    本文件
-DEVELOPMENT.md               架构、接口、改动清单、二次开发指南、回归用例
-CHANGELOG.md                 变更日志
+README.md                    本文件（中文）
+README.en.md                 English README
+DEVELOPMENT.md               架构、接口、改动清单、二次开发指南、回归用例（中文）
+DEVELOPMENT.en.md            English developer & handover manual
+CHANGELOG.md                 变更日志（中文）
+CHANGELOG.en.md              English changelog
 docs/                        README 用的界面截图（演示数据）
 ```
 

@@ -1,5 +1,7 @@
 # 变更日志
 
+**中文** | [English](CHANGELOG.en.md)
+
 ## 2026-11-22 · 首个公开版本
 
 首次以 GPL-3.0 在 GitHub 开源（本仓库为站点 `https://fenzhua.yzz.me/` 的对应源码）。
@@ -28,3 +30,11 @@
 
 - 新增 `DEVELOPMENT.md`（架构、接口、改动清单、二次开发指南与回归用例）
 - 新增 `NOTICE.txt`、`LICENSES/Apache-2.0.txt`
+
+## 2026-11-23 · 英文文档
+
+- 新增 `README.en.md`：完整英文 README（定位、上游关系、改动表、功能、截图、使用、八步部署、目录结构、技术栈与数据流、FAQ、许可）
+- 新增 `DEVELOPMENT.en.md`：英文二次开发与交接手册（后端数据模型、乐观锁、三层鉴权、PIN 演进、限额、动作清单、前端架构、扩展模板、13 条回归用例、已知限制）
+- 新增 `CHANGELOG.en.md`
+- 每份文档顶部加语言互链；`README.md`、`DEVELOPMENT.md`、`CHANGELOG.md` 均指向对应英文版
+- 在英文手册中标注「线上站已加固的主管理员改密流程尚未并入本仓库」这一已知差异
