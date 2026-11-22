@@ -2,6 +2,7 @@
 
 > 面向二次开发者：本文写清「相对上游改了什么、为什么改、怎么实现的、改的时候要注意什么」。
 > 上游：<https://gitee.com/hiteex/haitecard-web3>（GPL-3.0，Copyright (C) 2026 Hiteex Team）
+> 本仓库：<https://github.com/shiyidzyk/fenzhua-bank>
 > 本文档描述的是本站 `https://fenzhua.yzz.me/` 的改造版，修改日期 2026-11-22。
 
 ---
@@ -64,14 +65,27 @@ README-部署.md  部署与运维说明
 ### 3.1 启动与配置
 
 ```php
-$CFG   = ['host','port','user','pass','db'(留空自动探测同名库),'timeout'];
-$SECRET = '...';            // 所有令牌的 HMAC 密钥；换掉它 = 全部令牌失效
-$ADMIN_USER / $ADMIN_PASS;  // 出厂主管理员；data/root.json 存在时被覆盖
-$RECEIPT_MAX = 30;          // 每账号保留回单数
-$NOTIF_MAX   = 60;          // 每账号保留站内信数
-$CARD_BIN    = '888888';    // 卡号 BIN（固定，便于识别演示卡）
+$CFG   = ['host','port','user','pass','db'(留空自动探测同名库),'timeout'];  // 默认值仅占位
+$SECRET = 'change-me-...';   // 所有令牌的 HMAC 密钥；换掉它 = 全部令牌失效
+$ADMIN_USER / $ADMIN_PASS;   // 出厂主管理员；data/root.json 存在时被覆盖
+$RECEIPT_MAX = 30;           // 每账号保留回单数
+$NOTIF_MAX   = 60;           // 每账号保留站内信数
+$CARD_BIN    = '888888';     // 卡号 BIN（固定，便于识别演示卡）
 $LIMITS      = [1 => Ⅰ类规则, 2 => Ⅱ类规则];
 ```
+
+**凭据外置**：真实库口令与密钥写在同目录 `config.php`（返回数组，`.gitignore` 已排除），
+`api.php` 启动时 `include` 它并覆盖 `$CFG` / `SECRET` / `ADMIN_USER` / `ADMIN_PASS`：
+
+```php
+return [
+  'CFG' => ['host' => '127.0.0.1', 'user' => 'u', 'pass' => 'p', 'db' => 'db'],
+  'SECRET' => '...', 'ADMIN_USER' => '...', 'ADMIN_PASS' => '...',
+];
+```
+
+为什么这么做：`api.php` 是能被公网下载源码的（`?a=source`），凭据硬编码等于把它们一起公开。
+没有 `config.php` 时仍可运行，只是退回文件存储并用占位密钥 —— 生产环境必须配。
 
 存储选择：连库成功 → `$MODE='mysql'`；失败 → `$MODE='file'`，用 `data/store.php`（`storeTx()` 带文件锁）。
 
@@ -336,9 +350,9 @@ case 'demo': {
 
 ### 6.4 部署与运维
 
-- 上传：`index.html`、`api.php`、`bili-card.php`、`.htaccess`、`img/`、`ocr/`、`LICENSE.txt`；`data/` 需可写（`0705`）。
+- 上传：`index.html`、`api.php`、`config.php`（私有，最后才传也行，但先于 `api.php` 更稳）、`bili-card.php`、`.htaccess`、`img/`、`ocr/`、`LICENSE.txt`；`data/` 需可写（`0705`）。
 - 建表：见 §3.2 的 DDL；库名可留空让 `api.php` 自动探测。
-- 凭据：`$CFG`、`$SECRET`、`$ADMIN_USER/$ADMIN_PASS` 建议改成本站自己的值；改 `$SECRET` 会让所有令牌失效（用户需重登）。
+- 凭据：`config.php`（同目录、不入库）里配 `$CFG` / `SECRET` / `ADMIN_USER` / `ADMIN_PASS`；改 `SECRET` 会让所有令牌失效（用户需重登）。**不要**把口令写回 `api.php`。前端 `index.html` 的 `ADMIN_HASH` 需同步改为 `sha256Hex('pinkclaw::admin::' + 用户名 + '::' + 口令)`，否则后台入口进不去。
 - `data/` 绝不可公网可读（本仓库 `.htaccess` 已拦；Nginx 用 `nginx.conf` 的 `location ~ ^/data/ { deny all; }`）。
 - 健康检查：`GET api.php?a=ping` 应返回 `{"ok":1,"php":"8.4.x","store":"mysql"}`。返回 500 说明 PHP 语法/扩展问题，先回滚上一版。
 - 备份：后台「备份全库 JSON」（`dump`）导出的文件含 PIN 摘要与余额，**不要公开分享**。
