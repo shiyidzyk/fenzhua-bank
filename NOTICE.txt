@@ -1,0 +1,52 @@
+粉爪银行 · 卡包 —— NOTICE
+==========================
+
+本项目是上游开源项目的改造版（derivative work）。
+
+上游项目：haitecard-web3
+仓库地址：https://gitee.com/hiteex/haitecard-web3
+版权：Copyright (C) 2026 Hiteex Team
+许可：GNU General Public License v3.0
+
+本项目的修改（自 2026-11-22 起）包括：服务端存档（PHP + MySQL/file 双存储）、
+一二类账户限额、卡号+户名转账、方斯/环石结售汇、卡片状态管理、电子回单与站内信、
+管理后台（主/二级管理员）、删除墓碑与 UID 冻结、登录 PIN 的 PBKDF2 升级、
+登录失败限流与审计日志、令牌鉴权与令牌分仓、"关于 / 鸣谢 / 开源许可" 面板等。
+修改后的源码即本仓库；修改内容与实现方式见 DEVELOPMENT.md。
+
+本项目整体依 GPL-3.0 分发，许可全文见 LICENSE.txt。
+（GPL-3.0 要求分发时保留版权声明、标注修改，并提供对应源码；本仓库即为对应源码。）
+
+第三方组件
+----------
+
+1) Tesseract.js 5.1.1 及其 core（含 WebAssembly 构建）与 eng 语言包
+   位置：ocr/
+   许可：Apache License 2.0（全文见 LICENSES/Apache-2.0.txt）
+   版权：Copyright (C) Tesseract.js contributors / naptha；Tesseract OCR Copyright (C) Google Inc. 等
+
+2) jsQR 1.4.0（扫码解析，内嵌于 index.html）
+   许可：Apache License 2.0（全文见 LICENSES/Apache-2.0.txt）
+   版权：Copyright (C) Cozmo / jsQR contributors
+
+3) 哔哩哔哩 Toy SDK 与公开接口（运行时外链，未随本仓库分发）
+   位置：index.html 中的 s1.hdslb.com 引用
+   说明：仅运行时加载，其使用受哔哩哔哩相关条款约束，本项目不对其再分发
+
+4) 字体与图形素材
+   位置：img/
+   说明：卡面、logo、示例余额图与角色立绘由本项目/上游整理，权利归各自权利人；
+         依 GPL-3.0 随源码提供，但不构成对第三方商标、角色形象的任何授权。
+
+商标与角色
+----------
+
+"粉爪银行""Haitecard""小吱""久留美"等名称与角色形象用于虚构演示场景，
+不表示与任何真实机构、游戏厂商存在关联或授权关系。
+GPL-3.0 第 7(e) 条不授予商标使用权；二次分发请自行评估名称与素材的使用风险。
+
+联系方式
+--------
+
+问题反馈：https://github.com/shiyidzyk/fenzhua-bank/issues
+邮箱：shiyi363@qq.com

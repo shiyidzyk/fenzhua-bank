@@ -1,0 +1,16 @@
+# 私有配置（服务器上才需要，绝不入库）
+config.php
+data/
+# 运行期/本地备份
+*.log
+backup-*.json
+backup-*.html
+backup-*.php
+backup-*.md
+_online_bak/
+api2.php
+t.php
+# 部署脚本里的临时文件
+*.tmp
+.DS_Store
+Thumbs.db

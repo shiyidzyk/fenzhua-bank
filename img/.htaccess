@@ -1,0 +1,6 @@
+# img/ 目录：文件名带内容 hash，内容变了文件名就变，可以永久缓存
+<IfModule mod_headers.c>
+  Header set Cache-Control "public, max-age=31536000, immutable"
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>
+AddType image/webp .webp
