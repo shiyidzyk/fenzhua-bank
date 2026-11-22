@@ -162,7 +162,7 @@ function maskCard(string $no): string {
   return substr($d, 0, 4) . ' **** **** ' . substr($d, -4);
 }
 
-/* ---------- 汇率：服务端按日缓存真实 USD/CNY，含中行式买入/卖出价 ---------- */
+/* ---------- 汇率：服务端按日缓存现实 USD/CNY 中间价（仅供站内积分换算演示，不构成外汇报价） ---------- */
 function ratesPath(): string { global $DATA_DIR; return $DATA_DIR . '/rates.json'; }
 function ratesLoad(): array {
   $f = ratesPath();
@@ -1308,7 +1308,7 @@ switch ($a) {
     jout($out);
   }
 
-  /* ---------- 汇率（公开，按日缓存真实 USD/CNY） ---------- */
+  /* ---------- 汇率（公开，按日缓存现实 USD/CNY 中间价，演示用） ---------- */
   case 'rates': {
     $q = ratesQuote();
     jout(['ok' => 1, 'mid' => $q['mid'], 'buy' => $q['buy'], 'sell' => $q['sell'], 'cash' => $q['cash'],

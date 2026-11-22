@@ -2823,9 +2823,9 @@
 
       <div class="fx-board ex-reveal" id="fx-board">
         <div class="row buy"><span>现汇买入价（结汇：环石 → 方斯）</span><b id="fx-buy">—</b></div>
-        <div class="row"><span>中间价（参考人民币 / 美元）</span><b id="fx-mid">—</b></div>
+        <div class="row"><span>中间价（参考现实汇率 USD/CNY）</span><b id="fx-mid">—</b></div>
         <div class="row sell"><span>现汇卖出价（购汇：方斯 → 环石）</span><b id="fx-sell">—</b></div>
-        <div class="line" id="fx-line">牌价每日更新 · 报价口径参考境内银行结售汇通例：现汇买入 < 中间价 < 现汇卖出</div>
+        <div class="line" id="fx-line">参考现实汇率（USD/CNY 中间价，按日更新）· 演示买卖价差：现汇买入 < 中间价 < 现汇卖出 · 本站为虚构演示，不提供结汇 / 售汇业务</div>
         <div class="fx-tier" id="fx-tier"></div>
       </div>
 
@@ -2867,7 +2867,7 @@
         </div>
 
         <button class="ex-confirm" type="button" id="ex-confirm">确认兑换</button>
-        <div class="ex-note" id="ex-note">1 环石（HHS）≈ 7.10 方斯（HFS）· 人民币 / 美元口径<br>牌价每日更新；购汇适用现汇卖出价，结汇适用现汇买入价</div>
+        <div class="ex-note" id="ex-note">1 环石（HHS）≈ 7.10 方斯（HFS）· 参考现实汇率（USD/CNY 中间价，按日更新）<br>仅供演示；本站不提供结汇 / 售汇业务，此处「购汇 / 结汇」只是站内积分互换的演示叫法</div>
       </div>
     </div>
 
@@ -15451,7 +15451,7 @@ freezeBtn.addEventListener('click', ()=>{
   applyFrost(!state.frozen);
 });
 
-/* ---------- 兑换：汇率（人民币 / 美元口径） ---------- */
+/* ---------- 兑换：汇率（参考现实 USD/CNY 中间价） ---------- */
 let BASE_RATE = 7.10;        // 1 环石(HHS) = 7.10 方斯(HFS)，锚定 USD/CNY 中间价
 const HISTORY_DAYS = 30;     // 曲线展示近 30 天
 /* 牌价：银行现汇买入 / 中间 / 现汇卖出（中行式，含 0.35% 买卖价差） */
@@ -15622,7 +15622,7 @@ function renderExchange(){
   }
   const note = document.getElementById('ex-note');
   if(note){
-    note.innerHTML = '1 环石（HHS）≈ ' + q4(FXQ.mid) + ' 方斯（HFS）· 人民币 / 美元口径<br>牌价每日更新；购汇适用现汇卖出价，结汇适用现汇买入价';
+    note.innerHTML = '1 环石（HHS）≈ ' + q4(FXQ.mid) + ' 方斯（HFS）· 参考现实汇率（USD/CNY 中间价，按日更新）<br>仅供演示；本站不提供结汇 / 售汇业务';
   }
   const tier = document.getElementById('fx-tier');
   if(tier){
