@@ -12,7 +12,7 @@ return [
   ],
   // 所有令牌（用户 utk / 二级管理员 / 主管理员）的 HMAC 密钥；泄露等于令牌可伪造
   'SECRET'     => 'CHANGE-ME-random-32chars-please',
-  // 出厂主管理员；首次登录后台后建议用 rootset 改掉
-  'ADMIN_USER' => 'admin',
-  'ADMIN_PASS' => 'CHANGE-ME',
+  // 默认主管理员（开箱可用）；对外公开前请替换，并同步 index.html 的 ADMIN_HASH
+  'ADMIN_USER' => 'xiaozhi888',
+  'ADMIN_PASS' => 'xz668866',
 ];
