@@ -200,6 +200,84 @@ limAdd(st, amt)          → 成交后累加（金额按 HFS 记价）
 - **管理动作**：`auth`（换 root/sub 令牌）、`rootset`（改主管理员账密，改完旧令牌全废）、`subreg`/`subdel`、`adminedit`（改用户昵称/账号/PIN 或改二级管理员）、`list`（按 scope 过滤）、`dump`（root 全库备份，含 `rates`/`gone`）、`del`/`undel`。
 - **其它**：`nick`（昵称是否被占）、`cardchk`（卡号是否被占，撞了返回随机可用号）、`findcard`（卡号→户名核对）、`reset`（忘记密码：清空该账号并存档，需 PIN 或 root）、`source`（输出本文件源码，凭据打码）、`ping`（健康检查）。
 
+### 3.9 主管理员凭据修改（线上加固版设计）
+
+> 状态：**线上站已生效，本仓库代码尚未并入**。仓库当前 `api.php` 的 `rootset` 不要求当前口令、密码最短 6 位、只写 `root.json`、不校验新密码是否与旧值相同；`index.html` 仍内置 `ADMIN_HASH` 与离线兜底。本节是目标设计，移植时按此对齐。
+
+#### 数据源优先级
+
+```
+config.php 的 ADMIN_USER / ADMIN_PASS   ← 部署初始值（兜底）
+data/root.json 的 user/pass/ts          ← 存在即覆盖 config（真正生效）
+```
+
+两个文件都由 `api.php` 在启动时读取（`root.json` 读取失败或字段为空则不覆盖）。因此"改完就忘"的根因是：旧流程只改了其中一处，另一处仍留着上一个值；而前端又按第三处（`ADMIN_HASH`）判断，于是后台谁都进不去。
+
+#### 动作契约
+
+```
+POST api.php
+{
+  "act": "rootset",
+  "t":   "<管理员令牌>",     // 必须 root 角色
+  "op":  "<当前密码>",       // 必填，用于二次确认
+  "u":   "<新账号>",         // 可选，留空则不改
+  "p":   "<新密码>"          // 可选，留空则不改
+}
+→ { ok:1, user:"…", pass_changed:true, msg:"主管理员账密已更新…" }
+```
+
+#### 校验矩阵（按执行顺序）
+
+| 顺序 | 检查 | 失败返回 |
+|---|---|---|
+| 1 | `SCOPE['role'] === 'root'` | `auth` |
+| 2 | `rlLocked('!admincred')`（5 次 / 600 秒） | `locked` + `wait` |
+| 3 | `op` 非空 | `need_current` |
+| 4 | `hash_equals($ADMIN_PASS, $op)` | `bad_current` + `left`/`wait`，并 `rlFail` + 审计 |
+| 5 | `u`、`p` 至少改一项 | `nothing` |
+| 6 | 账号 `^[A-Za-z0-9_.-]{3,20}$`，且不与 `subAll()` 重名 | `bad_name` / `name_taken` |
+| 7 | 新密码 8–64 位 | `bad_pass` |
+| 8 | 新密码 ≠ 当前密码 | `same_pass`（拒绝"假改密"，保证旧值真的作废） |
+| 9 | `rootSave()` 写 `data/root.json` | `write_fail` |
+| 10 | `cfgAdminSave()` 同步 `config.php` | `cfg_write_fail`（先回滚 `root.json`） |
+
+#### 写入路径（`cfgAdminSave`）
+
+```
+config.php 读入
+  → preg_replace_callback 精确替换两行（'ADMIN_USER' => '…' / 'ADMIN_PASS' => '…'），
+    用回调返回值而非替换串，避免口令里的 $ / 反斜杠被解释
+  → 旧文件备份 data/bak/config.prev.php
+  → 临时文件 data/cfg.<rand>.tmp 写入并校验长度
+  → rename() 原子替换
+  → 回读并正则确认两行已是新值；否则返回 why=verify
+```
+
+失败点会带 `why`（`missing` / `read` / `pattern` / `tmp` / `rename` / `verify`），同时写入审计 `rootset fail cfg_<why>`。任一步失败，`rootset` 都会先 `rootSave(旧账号, 旧密码)` 回滚，再返回 `cfg_write_fail` —— **旧账密继续有效**，不会出现"服务端有新值、文件是旧值"的分裂状态。
+
+#### 令牌与旧口令的失效机制
+
+```
+admToken() = hash_hmac('sha256', 'admin|v1|' . ADMIN_USER . '|' . hash('sha256', ADMIN_PASS), SECRET)
+```
+
+账密一变，令牌签名必然对不上：旧令牌访问任何 `$SCOPE` 动作都会得到 `auth`；旧口令在 `auth`（后台登录）与 `rootset`（当前口令校验）两处都会失败。前端在成功回调里 `adminClose()`（清 `sessionStorage` 管理员键）+ 跳登录页，避免浏览器里继续留着一个已失效但界面仍显示在线的会话。
+
+#### 审计
+
+```
+rootset fail bad_current
+rootset fail cfg_<why>
+rootset ok user=<新账号> pass_changed=<0|1>
+```
+
+`data/audit.log` 与 `data/bak/config.prev.php` 都位于 `data/`，被 `.htaccess`（`RewriteRule ^data/ - [F,L]`）与 `nginx.conf`（`location ~ ^/data/ { deny all; }`）拒绝公网读取。
+
+#### 忘记口令时的唯一恢复路径
+
+流程要求当前口令，无法自助重置。用主机面板 / FTP 编辑 `data/root.json` 为 `{"user":"…","pass":"…","ts":…}`，保存即生效（覆盖 `config.php`），旧令牌同时失效；随后进后台走一次正常改密，把 `config.php` 同步回同一组值。**不要**把恢复用的口令写进仓库或本文档。
+
 ---
 
 ## 4. 前端 index.html
@@ -355,6 +433,7 @@ case 'demo': {
 - 上传：`index.html`、`api.php`、`config.php`（私有，最后才传也行，但先于 `api.php` 更稳）、`bili-card.php`、`.htaccess`、`img/`、`ocr/`、`LICENSE.txt`；`data/` 需可写（`0705`）。
 - 建表：见 §3.2 的 DDL；库名可留空让 `api.php` 自动探测。
 - 凭据：`config.php`（同目录、不入库）里配 `$CFG` / `SECRET` / `ADMIN_USER` / `ADMIN_PASS`；改 `SECRET` 会让所有令牌失效（用户需重登）。**不要**把口令写回 `api.php`。前端 `index.html` 的 `ADMIN_HASH` 需同步改为 `sha256Hex('pinkclaw::admin::' + 用户名 + '::' + 口令)`，否则后台入口进不去。
+- 本仓库的默认演示账密是 `xiaozhi888` / `xz668866`（见 `config.example.php` 与 README），**不要**因为改密流程的文档改动去动它；线上实例的真实账密只存在于服务器 `data/root.json` 与 `config.php`，不入库、不写文档。
 - `data/` 绝不可公网可读（本仓库 `.htaccess` 已拦；Nginx 用 `nginx.conf` 的 `location ~ ^/data/ { deny all; }`）。
 - 健康检查：`GET api.php?a=ping` 应返回 `{"ok":1,"php":"8.4.x","store":"mysql"}`。返回 500 说明 PHP 语法/扩展问题，先回滚上一版。
 - 备份：后台「备份全库 JSON」（`dump`）导出的文件含 PIN 摘要与余额，**不要公开分享**。
@@ -395,6 +474,7 @@ case 'demo': {
 3. 合规待办（详见 `合规检查报告-上游要求对照-20261122.md`）：许可面板「不用于商业用途」与 GPL §10 冲突；NOTICE 漏 jsQR；缺 Apache-2.0 全文与 `source.zip`；品牌/素材授权待确认。
 4. `img/*.webp` 与上游 base64 素材的对应关系未逐张核对。
 5. 后台主管理员账密仍以常量形式存在（可被 `data/root.json` 覆盖），建议开源前改为环境变量或安装向导。
+6. 把线上的加固改密流程并入本仓库（设计见 §3.9）：`rootset` 增加当前口令二次确认与 `!admincred` 限流、新密码 8–64 位且不得与旧值相同、`cfgAdminSave()` 原子同步 `config.php` 并在失败时回滚 `root.json`、删除前端 `ADMIN_HASH` 与离线兜底登录、成功后清管理员会话。移植前请确认仓库默认演示账密 `xiaozhi888` / `xz668866` 保持原样。
 
 ---
 
@@ -419,3 +499,4 @@ case 'demo': {
 
 - 文档：新增英文版 `README.en.md`、`DEVELOPMENT.en.md`、`CHANGELOG.en.md`，并在各文档顶部加语言互链。
 - 文档：英文手册中标注「线上站已加固的主管理员改密流程（当前口令二次确认 + `root.json`/`config.php` 原子同步 + 旧口令旧令牌立即失效）尚未并入本仓库」，列入 §7 待办第 6 条。
+- 文档：新增 §3.9「主管理员凭据修改（线上加固版设计）」，写清数据源优先级、`rootset` 契约、10 步校验矩阵、`cfgAdminSave` 写入与回滚路径、令牌失效原理、审计字段与忘记口令的唯一恢复路径。

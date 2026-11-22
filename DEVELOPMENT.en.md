@@ -177,6 +177,84 @@ Counters live in `st.lim` with date stamps; `limCheck` rolls them over when the 
 | `adminset` | root | Manage sub-admins and their bound account |
 | `source` | none | Serve `index.html` source for the licence panel download |
 
+### 3.8 Changing the root credentials (hardened design)
+
+> Status: **live on the deployed instance, not yet merged into this repository.** The `rootset` in the `api.php` shipped here does not require the current password, accepts 6-character passwords, writes `root.json` only, and does not reject an unchanged password; `index.html` still embeds `ADMIN_HASH` and the offline fallback. This section is the target design to port against.
+
+#### Credential precedence
+
+```
+config.php: ADMIN_USER / ADMIN_PASS    ← deployment seed (fallback)
+data/root.json: user / pass / ts       ← when present it overrides config (effective)
+```
+
+Both are read at startup; an unreadable or empty `root.json` simply does not override. The old "change it and forget it" failure came from updating one file while the other kept the previous value, with the frontend judging by a third artefact (`ADMIN_HASH`) — so nobody could get in.
+
+#### Contract
+
+```
+POST api.php
+{
+  "act": "rootset",
+  "t":   "<admin token>",   // must carry the root role
+  "op":  "<current password>",  // required, second confirmation
+  "u":   "<new username>",   // optional
+  "p":   "<new password>"    // optional
+}
+→ { ok:1, user:"…", pass_changed:true, msg:"…" }
+```
+
+#### Validation matrix (in order)
+
+| # | Check | Failure |
+|---|---|---|
+| 1 | `SCOPE['role'] === 'root'` | `auth` |
+| 2 | `rlLocked('!admincred')` (5 attempts / 600 s) | `locked` + `wait` |
+| 3 | `op` present | `need_current` |
+| 4 | `hash_equals($ADMIN_PASS, $op)` | `bad_current` + `left`/`wait`, plus `rlFail` and an audit entry |
+| 5 | at least one of `u` / `p` changed | `nothing` |
+| 6 | username matches `^[A-Za-z0-9_.-]{3,20}$`, not colliding with `subAll()` | `bad_name` / `name_taken` |
+| 7 | new password 8–64 characters | `bad_pass` |
+| 8 | new password differs from the current one | `same_pass` (rejects a fake change so the old value is really retired) |
+| 9 | `rootSave()` writes `data/root.json` | `write_fail` |
+| 10 | `cfgAdminSave()` syncs `config.php` | `cfg_write_fail` (with `root.json` rolled back) |
+
+#### Write path (`cfgAdminSave`)
+
+```
+read config.php
+  → preg_replace_callback replaces exactly the two lines ('ADMIN_USER' => '…' / 'ADMIN_PASS' => '…'),
+    returning the value from the callback so $ and backslashes in the password are not interpreted
+  → back up the old file to data/bak/config.prev.php
+  → write a temp file data/cfg.<rand>.tmp and check its length
+  → rename() atomically into place
+  → read back and confirm both lines hold the new values; otherwise why=verify
+```
+
+Every failure carries a `why` (`missing` / `read` / `pattern` / `tmp` / `rename` / `verify`) and appends `rootset fail cfg_<why>` to the audit log. On any failure `rootset` first calls `rootSave(oldUser, oldPass)` and then returns `cfg_write_fail` — **the old credentials stay valid** and no split state ("server has the new value, file has the old one") is left behind.
+
+#### Why the old token and old password die
+
+```
+admToken() = hash_hmac('sha256', 'admin|v1|' . ADMIN_USER . '|' . hash('sha256', ADMIN_PASS), SECRET)
+```
+
+Any credential change breaks the signature, so the old token receives `auth` on every `$SCOPE` action, and the old password fails both `auth` (console login) and `rootset` (current-password check). On success the frontend calls `adminClose()` (clearing the `sessionStorage` admin keys) and returns to login, so no stale-but-still-on-screen admin session remains.
+
+#### Audit
+
+```
+rootset fail bad_current
+rootset fail cfg_<why>
+rootset ok user=<new user> pass_changed=<0|1>
+```
+
+`data/audit.log` and `data/bak/config.prev.php` both live under `data/`, denied to the public by `.htaccess` (`RewriteRule ^data/ - [F,L]`) and `nginx.conf` (`location ~ ^/data/ { deny all; }`).
+
+#### The only recovery when the password is forgotten
+
+The flow needs the current password and has no self-service reset. Edit `data/root.json` through the hosting panel / FTP to `{"user":"…","pass":"…","ts":…}`; saving takes effect immediately (overriding `config.php`) and invalidates the old token. Then log in and run one normal change so `config.php` is realigned. **Never** put a recovery password into this repository or this document.
+
 ---
 
 ## 4. Frontend (`index.html`)
@@ -337,7 +415,7 @@ For display-only content, the cheaper route is `openModal(...)`, as in `openAbou
 - Health check: `GET api.php?a=ping` → `{"ok":1,"php":"8.4.x","store":"mysql"}`. A 500 means PHP syntax/extension problems — roll back the previous version first.
 - Backup: the console's "full backup JSON" (`dump`) contains PIN digests and balances; **do not share it publicly**.
 
-> **Known drift (as of 2026-11-23):** the live instance `fenzhua.yzz.me` runs a hardened credential flow that is **not yet in this repository** — the root password change requires the current password, writes `data/root.json` and syncs `config.php` atomically (rollback on failure), and `index.html` no longer carries `ADMIN_HASH` (no offline fallback login). Until the code here is updated, follow the deployment notes above for this repository, and see §7 item 6.
+> **Known drift (as of 2026-11-23):** the live instance `fenzhua.yzz.me` runs a hardened credential flow that is **not yet in this repository** — the root password change requires the current password, writes `data/root.json` and syncs `config.php` atomically (rollback on failure), and `index.html` no longer carries `ADMIN_HASH` (no offline fallback login). The design is written down in §3.8; until the code here is updated, follow the deployment notes above for this repository, and see §7 item 6. The demo credentials in this repository remain `xiaozhi888` / `xz668866` regardless.
 
 ### 6.5 Minimal regression set after any change
 
@@ -375,7 +453,7 @@ For display-only content, the cheaper route is `openModal(...)`, as in `openAbou
 3. Compliance TODOs (see `合规检查报告-上游要求对照-20261122.md`): the licence panel's "non-commercial use" wording conflicts with GPL §10; NOTICE omits jsQR; the Apache-2.0 full text and `source.zip` were missing; brand/asset authorisation unconfirmed.
 4. The mapping between `img/*.webp` and upstream base64 assets has not been checked image by image.
 5. Root admin credentials still exist as constants (overridable by `data/root.json`); an environment variable or install wizard is recommended before going public.
-6. Port the live hardening to this repository: server-authoritative admin credentials (`data/root.json` + `config.php` written atomically), a current-password confirmation on change, removal of `ADMIN_HASH` and of the offline fallback login, and immediate invalidation of the old password and old tokens.
+6. Port the live hardening to this repository (design in §3.8): a current-password confirmation and the `!admincred` limiter in `rootset`, an 8–64 character new password that must differ from the old one, `cfgAdminSave()` syncing `config.php` atomically with a `root.json` rollback on failure, removal of `ADMIN_HASH` and the offline fallback login, and clearing the admin session on success. Before porting, confirm the repository's demo credentials `xiaozhi888` / `xz668866` stay unchanged.
 
 ---
 
@@ -399,3 +477,5 @@ For display-only content, the cheaper route is `openModal(...)`, as in `openAbou
 ### 2026-11-23
 
 - Docs: added `README.en.md`, `DEVELOPMENT.en.md` and `CHANGELOG.en.md`; language switch links at the top of every document.
+- Docs: added §3.8 "Changing the root credentials (hardened design)" with credential precedence, the `rootset` contract, the ten-step validation matrix, the `cfgAdminSave` write and rollback path, token invalidation, audit entries and the single recovery route; the same section exists in the Chinese manual.
+- Docs: both READMEs gained a "root credential change (hardened flow)" section and two FAQ entries; the repository's demo credentials are explicitly documented as unchanged.

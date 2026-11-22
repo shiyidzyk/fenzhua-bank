@@ -21,6 +21,7 @@ A "fictional bank" demo that really logs in, really stores data and really moves
 - [Feature overview](#feature-overview)
 - [Screenshots](#screenshots)
 - [How to use](#how-to-use)
+- [Changing the root credentials (hardened flow)](#changing-the-root-credentials-hardened-flow)
 - [Build and deployment](#build-and-deployment)
 - [Repository layout](#repository-layout)
 - [Stack and data flow](#stack-and-data-flow)
@@ -181,7 +182,75 @@ Username: xiaozhi888
 Password: xz668866
 ```
 
-These are **demo defaults, not a security boundary**. Replace them before going public (keep `config.php`, `data/root.json` and `ADMIN_HASH` in `index.html` in sync — see [deployment step 6](#build-and-deployment)).
+These are **demo defaults, not a security boundary**. Replace them before going public. In the code currently in this repository that means keeping `config.php`, `data/root.json` and `ADMIN_HASH` in `index.html` in sync (see [deployment step 6](#build-and-deployment)); the live instance uses the hardened flow described in the next section.
+
+---
+
+## Changing the root credentials (hardened flow)
+
+> **Code status**: this section documents the credential change flow already running on the live instance `https://fenzhua.yzz.me/`. It is **not yet merged into this repository** — `api.php` here is the older version (no current-password check, 6-character minimum, writes `data/root.json` only) and `index.html` still embeds `ADMIN_HASH`. Read the design first, then decide whether to port it.
+>
+> **The repository's demo credentials stay `xiaozhi888` / `xz668866`** and this documentation change does not touch them. Real credentials of the live instance are runtime data and are never written into this repository.
+
+### What it fixes
+
+| Old problem | Hardened behaviour |
+|---|---|
+| Change it, then forget it | Self-service change inside the console, and the **current password is mandatory**, so a change can no longer land on a value nobody knows |
+| Three places disagree (`config.php` / `data/root.json` / frontend hash) | One server-side source of truth: `data/root.json` wins, and the change flow rewrites `config.php` to the same values; the frontend no longer stores any password digest |
+| The old credentials keep working | The admin token is bound to the credentials (`sha256(password)` is part of the signature), so the old token dies immediately and the old password matches nothing |
+| A half-applied change | `root.json` is written first, `config.php` second; if the second write fails, the first is rolled back — no mixed state is left behind |
+
+### The correct route (the only order)
+
+1. Console sheet "Change root administrator credentials": `current password` → `username` (prefilled) → `new password` (leave empty to change the username only).
+2. Frontend pre-check: current password present; new password 8–64 characters and different from the current one; at least one field actually changed.
+3. `POST api.php` with `act=rootset`, the admin token `t`, `op` (current password), optional `u` and `p`.
+4. The server then:
+   - requires a `root` token (`SCOPE['role'] === 'root'`), otherwise `auth`;
+   - checks the `!admincred` limiter (5 failures ⇒ 600 s lock), returning `locked` + `wait`;
+   - compares the current password with `hash_equals`; missing ⇒ `need_current`, wrong ⇒ `bad_current` (returns `left`, `wait`);
+   - validates the username (3–20 chars of `A-Za-z0-9_.-`, not taken by a sub-admin ⇒ `bad_name` / `name_taken`) and the new password (8–64, not equal to the current one ⇒ `bad_pass` / `same_pass`); nothing changed ⇒ `nothing`;
+   - writes `data/root.json` (the effective source — when present it overrides the same keys in `config.php`); failure ⇒ `write_fail`;
+   - syncs `config.php`: replaces exactly the two lines `ADMIN_USER` / `ADMIN_PASS`, backs the old file up to `data/bak/config.prev.php`, writes a temp file under `data/` and `rename()`s it into place, then reads the file back to verify;
+   - if the config sync fails, **rolls `root.json` back** and returns `cfg_write_fail` ("rolled back, the old credentials are still valid");
+   - on success clears the limiter, appends `rootset ok user=… pass_changed=0/1` to the audit log, and the frontend calls `adminClose()` and returns to the login screen.
+5. Log in again with the new credentials.
+
+### What stops working immediately
+
+| Object | Result |
+|---|---|
+| Old password | No longer matches: both console login and the `rootset` current-password check reject it |
+| Old admin token | Dead at once. The token is an HMAC by `SECRET` over a version tag, the username and the password digest — a credential change breaks the signature |
+| Frontend admin session | `adminClose()` clears the `sessionStorage` admin keys and returns to the login screen on success |
+| `data/root.json` | The new credentials (effective source) |
+| `config.php` | Rewritten to the same values; a fallback/portable config, no more "file says old, server uses new" |
+| `data/audit.log` | A success or failure entry (failures carry `bad_current` / `cfg_<why>`) |
+
+### Error codes
+
+| `err` | Meaning | Old credentials still valid? |
+|---|---|---|
+| `auth` | Not root, or the token is already invalid | yes |
+| `need_current` | Current password not supplied | yes |
+| `bad_current` | Current password wrong (`left`, `wait`) | yes |
+| `locked` | Too many attempts, wait `wait` seconds | yes |
+| `same_pass` | New password equals the current one — rejected as a fake change | yes |
+| `bad_pass` / `bad_name` / `name_taken` | Format or name-collision failure | yes |
+| `nothing` | Neither username nor password changed | yes |
+| `write_fail` | `data/` not writable | yes |
+| `cfg_write_fail` | `config.php` sync failed and was rolled back | yes |
+
+### If it is genuinely forgotten
+
+The flow needs the current password, so "forgot it" cannot be self-served. The only recovery: open `data/root.json` through the hosting panel / FTP, write a pair you will remember (`{"user":"…","pass":"…","ts":…}`) and save — it takes effect immediately (`root.json` overrides `config.php`) and invalidates the old token. Afterwards log in and run a normal change once so `config.php` and `root.json` agree again.
+
+### Boundaries
+
+- Real credentials exist only in the server's `data/root.json` and `config.php`. Neither is committed, and both are denied to the public by `.htaccess` / `nginx.conf`; the `data/bak/config.prev.php` backup and `data/audit.log` produced by the flow are equally 403.
+- No concrete credentials appear in this section. `xiaozhi888` / `xz668866` are demo defaults only — replace them after deployment (see the previous section).
+- The hardened version removes `ADMIN_HASH` and the offline fallback ("sign in with the frontend hash when the server is unreachable"): the console is online-verification only and the frontend holds no password digest at all.
 
 ---
 
@@ -418,7 +487,10 @@ Deployment order is always `api.php` → `ping` → `index.html`.
 ## FAQ
 
 **Q: The admin console says "incorrect username or password", but the password is right.**
-Three places must agree: `config.php`, `data/root.json` (if present it overrides config) and `ADMIN_HASH` in `index.html`. Miss one and it fails. Also hard-refresh (`Ctrl+Shift+R`); a cached page carries the old digest.
+With the code currently in this repository, three places must agree: `config.php`, `data/root.json` (overrides config when present) and `ADMIN_HASH` in `index.html`; miss one and it fails. Hard-refresh first (`Ctrl+Shift+R`). The hardened live flow has no `ADMIN_HASH` — only `root.json` and `config.php`, which the change flow keeps in sync (see [the section above](#changing-the-root-credentials-hardened-flow)).
+
+**Q: I changed the root credentials and immediately forgot them.**
+The hardened flow requires the current password, so self-service recovery is impossible. Open `data/root.json` through the hosting panel / FTP and write a pair you will remember — it takes effect on save (it overrides `config.php`) and invalidates the old token; then run a normal change once in the console to realign both files.
 
 **Q: An action succeeds, then reverts after refresh.**
 `push` went out without `ver`, so it was rejected as `conflict` and silently dropped. Send the version (frontend `apiVer`) and retry.
